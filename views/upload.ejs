@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title><%= title %></title>
+    <link rel='stylesheet' href='/stylesheets/style.css' />
+</head>
+<body>
+<h1><%= title %></h1>
+
+<form action="/items/upload" method="POST" enctype="multipart/form-data">
+
+    <p>FolderId <input type="text" name="folderId" value="fobe2ff6-009b-453b-8fdb-c63e43b78b65"/></p>
+    <p>File <input type="file" name="file"/></p>
+    <br/>
+    <input type="submit" />
+</form>
+
+<br/>
+
+<div>
+    <%if (res) {%>
+        <hr/>
+        <p>Response:</p>
+        <%= res %>
+    <%}%>
+</div>
+
+</body>
+</html>
