@@ -3,7 +3,7 @@ var https = require('https');
 var fs = require('fs');
 
 //var app = require('../app');
-process.env.SERVER_TYPE = process.env.SERVER_TYPE || 'https';
+process.env.SERVER_TYPE = process.env.SERVER_TYPE || 'http';
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
 require('./config/' + process.env.NODE_ENV);
 

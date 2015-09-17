@@ -4,6 +4,8 @@
 
 'use strict';
 var fs = require('fs');
+var http = require('http');
+var urlParser = require('url');
 var debug = require('debug');
 var request = require('superagent');
 
@@ -13,8 +15,8 @@ var shareFileModule = function (options) {
     //this.tokens = null;
 
     this.tokens = {
-        "access_token": "0c4O6KOOmC5FTXucfeCKRPNEqRHDrcNp$$mFKKxncjyQJ3MDaUZFNh2Ht4pq8XmgKe",
-        "refresh_token": "0c4O6KOOmC5FTXucfeCKRPNEqRHDrcNp$$4hdZewrAUgSqFQJP6HFTzysi8RPw00sZfBG43EIu",
+        "access_token": "p5AoAPaarAB6QJNA4fVGM390143Yuu6Y$$zn61ZcOD6ZSrAVizbvmSCpGOKpZouxRM",
+        "refresh_token": "p5AoAPaarAB6QJNA4fVGM390143Yuu6Y$$ZFzXXmTvfqIGeLEJhTOtVdaX6Jjzrg5oSHFDPvti",
         "token_type": "bearer",
         "appcp": "sharefile.com",
         "apicp": "sharefile.com",
@@ -320,7 +322,8 @@ var shareFileModule = function (options) {
         var host = url.host;
         var path = url.path;
 
-        form.append('Filedata', fs.createReadStream(filePath));
+        form.append('Filedata', filePath);
+        /*form.append('Filedata', fs.createReadStream(filePath));
         //form.submit(chunkUri, function(err, res) {
         form.submit(chunkUri, function(err, res) {
             if (err) {
@@ -344,19 +347,41 @@ var shareFileModule = function (options) {
             console.log(res.statusCode);
             //callback(null, {success: 'uploaded'});
 
-        });
+        });*/
 
 
-        /*var request = http.request({
+        var request = http.request({
             method: 'post',
             host: host,
             path: path,
             headers: form.getHeaders()
         });
 
-        //form.pipe(request);
+        form.pipe(request);
 
-        request.on('connect', function (socket) {
+        request.on('response', function(res) {
+            console.log(res.statusCode);
+
+            var message = '';
+
+            res.on('data', function (chunk) {
+                console.log('got data', chunk);
+                message += chunk;
+            });
+
+            res.on('end', function () {
+                console.log('res.end');
+                console.log(message);
+                callback(null, message);
+            });
+
+            console.log(res.req.headers);
+            console.log('Done');
+            console.log(res.statusCode);
+        });
+
+
+        /*request.on('connect', function (socket) {
                 console.log('connected');
 
                 socket.on('data', function (chunk) {
@@ -377,11 +402,10 @@ var shareFileModule = function (options) {
             if (callback && (typeof callback === 'function')) {
                 callback(err);
             }
-        });
-    */
+        });*/
     };
 
-    function multipartFormPostUpload(chunkUri, file, callback) {
+    function multipartFormPostUpload_4(chunkUri, file, callback) {
         var urlParser = require('url');
         var url;
         var FormData = require('form-data');
@@ -400,6 +424,7 @@ var shareFileModule = function (options) {
         filePath = file.path;
         console.log(filePath);
         console.log(chunkUri);
+        var fileSize = file.size;
 
         var http = require('http');
 
@@ -408,14 +433,53 @@ var shareFileModule = function (options) {
         var host = url.host;
         var path = url.path;
 
-        form.append('Filedata', fs.createReadStream(filePath));
-
         var formHeaders = form.getHeaders();
 
-        formHeaders['connection'] = 'keep-alive';
-        formHeaders['content-length'] = '9531';
+        //formHeaders['connection'] = 'keep-alive';
+        formHeaders['content-length'] = fileSize;
 
-        console.log('formHeaders');
+        var CRLF = '\r\n';
+        //var form = new FormData();
+        //form.append('Filedata', fs.createReadStream(filePath));
+
+        var uploadOptions = {
+            header: CRLF + '--' + form.getBoundary() + CRLF + 'Content-Type: multipart/form-data' + CRLF + CRLF,
+            knownLength: file.size
+        };
+
+
+        fs.readFile(filePath, function (err, data) {
+            if (err) throw err;
+            console.log(data);
+
+            console.log(uploadOptions);
+            //console.log(fs.createReadStream(filePath));
+
+            form.append('Filedata', data, uploadOptions);
+
+            form.submit(chunkUri, function(err, res) {
+                var message = '';
+
+                if (err) throw err;
+                console.log(res.statusCode);
+
+                res.on('data', function (chunk) {
+                    console.log('got data', chunk);
+                    message += chunk;
+                });
+
+                res.on('end', function () {
+                    console.log('res.end');
+                    console.log(message);
+                    callback(null, message);
+                });
+
+            });
+        });
+
+
+
+        /*console.log('formHeaders');
         console.log(formHeaders);
 
         var request = http.request({
@@ -437,7 +501,7 @@ var shareFileModule = function (options) {
                 message += chunk;
             });
 
-            res.on('end', function (chunk) {
+            res.on('end', function () {
                 console.log('res.end');
                 console.log(message);
                 callback(null, message);
@@ -446,8 +510,77 @@ var shareFileModule = function (options) {
             console.log(res.req.headers);
             console.log('Done');
             console.log(res.statusCode);
-        });
+        });*/
 
+    };
+
+    function multipartFormPostUpload(chunkUri, file, callback) {
+        var fileName;
+        var filePath;
+
+        if (!chunkUri) { //check is got upload url:
+            throw new Error('No Upload URL received');
+        }
+
+        if (!file || !file.path) { //check is got upload url:
+            throw new Error('Incorrect parameter "file"');
+        }
+
+        console.log('>>> try to upload the file');
+
+        fileName = file.originalFilename;
+        filePath = file.path;
+
+        console.log(filePath);
+        console.log(fileName);
+
+        function httpRequest(chunkUri, fileName, fileData, callback) {
+            var url = urlParser.parse(chunkUri);
+            var host = url.host;
+            var path = url.path;
+            var boundaryKey = new Date().valueOf();
+            var newline = '\r\n';
+
+            var body = '--' + boundaryKey + newline +
+                'Content-Disposition: form-data; name="File1"; filename="' + fileName + '"' + newline +
+                '' + newline +
+                fileData + newline +
+                '--' + boundaryKey +
+                '' + newline + newline;
+
+            //request:
+            var request = http.request({
+                method: 'post',
+                host: host,
+                path: path
+            });
+
+            request.setHeader('Content-Type', 'multipart/form-data; boundary="' + boundaryKey + '"');
+            request.write(body);
+            request.end();
+
+            //response:
+            request.on('response', function(res) {
+                var message = '';
+
+                console.log(res.statusCode);
+
+                res.on('data', function (chunk) {
+                    //console.log('got data', chunk);
+                    message += chunk;
+                });
+
+                res.on('end', function () {
+                    console.log(message);
+                    callback(null, message);
+                });
+            });
+        }
+
+        fs.readFile(filePath, function (err, fileData) {
+            if (err) throw err;
+            httpRequest(chunkUri, fileName, fileData, callback);
+        });
     };
 
     this.uploadFile = function (folderId, file, callback) {
@@ -487,7 +620,24 @@ var shareFileModule = function (options) {
 
         multipartFormPostUpload(chunkUri, file, callback);
         //callback(null, 'SUCCESS');
-    }
+    };
+
+    this.getThumbnailUrl = function (itemId, options) {
+        var hostname;
+        var url;
+        var size = (options && options.size) ? options.size : '75';
+
+        if (!self.tokens || !self.tokens.subdomain) {
+            throw new Error('Unauthorized');
+        }
+
+        hostname = self.tokens.subdomain;
+        //https://nokojetihinboxdesign.sharefile.com/Viewer/Thumbnail/?itemId=fi2e93c3-9b20-1f89-0886-8dfd51257995&thumbNailSize=75
+        url = 'https://' + hostname + '.sharefile.com/Viewer/Thumbnail/?itemId=' + itemId;
+        url += '&thumbNailSize=' + size;
+
+        return url;
+    };
 
 };
 
