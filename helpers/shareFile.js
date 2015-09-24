@@ -3,32 +3,44 @@
  */
 
 'use strict';
+
 var fs = require('fs');
 var http = require('http');
 var urlParser = require('url');
 var debug = require('debug');
 var request = require('superagent');
+var async = require('async');
 
 var shareFileModule = function (options) {
     var self = this;
 
+    this.credentials = null;
+
     //this.tokens = null;
 
+    /*
+
+
+     https://storage-eu-1.sharefile.com/upload.aspx?uploadid=b58ecc82-dcce-479b-a0dc-90a461c6664a&tool=apiv3&batchid=495548d7-4f77-4ff6-b013-d027b5d05e08&encparams=PBN6_1wjDN-1sW9OZszG82T4lb9C6j7eqW2wkB9iMpFAfcVgCdqfIGQZiBCKbV-YyzPHs9L1H9L03swD0UAM_gNIDAIaztYXO72iDIJPT0mfUNTYeCVpjOeUuZJ5VSe8VxUPjVA1jYgOPk8aomYz5VKR_3j3lR7rwD7Y55Gp_RdSXuaBYhnRPr5hjRdmBWWZ3tDd599bzWsbtG8Td6I_QldscT_QS_wIdsSjcbtcGTJ1OHMIVv7H3AvZI8iwwqXylzKwewVUZqnLF4T6E9YVk03vHNdyOHkeQaICmEM1kE-x8K_24BTDzSDpE3QLa2_ROOnYGK9-NME_sA7MvPAev8PWkdmCm-PX_4rJMuldzwCiwnKDwEOkavz4gMD0q-IuMS8khjRtVzfTNIvSOOOnltsNNvBX016piq7asuiVtj2Y119e1ZXQJKeauYxdgCE6-CDx8aySU6zy1RxeLC7sAVqsdwS0whJWe5LageZeXhon8Fm51puEzQp6k5Sj1LLbKfKVrOPVgVQyvAyEYNXmkmUzrGTPSnpNa5WOXtBTDxk2Xv_WBbmD0avLr5L5ZsTQWWLy9j2Zeug554nTx--UjIBICOp9B1nmz1u57lg$&h=4gsjXq7%2bzJExZ81aKTjPdz8W%2bYeir4NtW6IRRwnrXGU%3d
+
+
+    */
+
     this.tokens = {
-        "access_token": "p5AoAPaarAB6QJNA4fVGM390143Yuu6Y$$zn61ZcOD6ZSrAVizbvmSCpGOKpZouxRM",
-        "refresh_token": "p5AoAPaarAB6QJNA4fVGM390143Yuu6Y$$ZFzXXmTvfqIGeLEJhTOtVdaX6Jjzrg5oSHFDPvti",
-        "token_type": "bearer",
-        "appcp": "sharefile.com",
-        "apicp": "sharefile.com",
-        "subdomain": "nokojetihinboxdesign",
-        "expires_in": 28800,
-        "access_files_folders": true,
-        "modify_files_folders": true,
-        "admin_users": true,
-        "admin_accounts": true,
-        "change_my_settings": true,
-        "web_app_login": true
-    };
+        access_token: "gvQGsr5soRF7R6tzZBaefxKBG9qzgGX5$$zI0MhYaBbYD6iFoH0mKLSqYYNvtQU0xU",
+        refresh_token: "gvQGsr5soRF7R6tzZBaefxKBG9qzgGX5$$yYBDsNJkBgBmtjDZhPPbp5x4PvlxwzBtDA8JJhwW",
+        token_type: "bearer",
+        appcp: "sharefile.com",
+        apicp: "sharefile.com",
+        subdomain: "nokojetihinboxdesign",
+        expires_in: 28800,
+        access_files_folders: true,
+        modify_files_folders: true,
+        admin_users: true,
+        admin_accounts: true,
+        change_my_settings: true,
+        web_app_login: true
+     };
 
     function isAuthorized(callback) {
         var tokens = self.tokens;
@@ -55,19 +67,13 @@ var shareFileModule = function (options) {
         }
     }
 
-    function setUriFromQueryParams(uri, query) {
-        var isFirstParam = true;
+    function formatUrlQueryParams(uri, query) {
+        var url = urlParser.parse(uri);
 
-        for (var param in query) {
-            if (isFirstParam) {
-                uri += '?' + param + '=' + query[param];
-                isFirstParam = false;
-            } else {
-                uri += '&' + param + '=' + query[param];
-            }
-        }
+        url.query = query;
+        url = urlParser.format(url);
 
-        return uri;
+        return url;
     }
 
     function makeRequest(options, callback) {
@@ -94,7 +100,7 @@ var shareFileModule = function (options) {
             authHeader = self.getAuthorizationHeader();
             hostname = self.getHostName();
 
-            uri = setUriFromQueryParams(uri, query);
+            uri = formatUrlQueryParams(uri, query);
             url = hostname + uri;
 
             console.log('>>> try to make request');
@@ -108,10 +114,18 @@ var shareFileModule = function (options) {
                     console.log('>>> res.status ', res.status);
 
                     if (err) {
-                        return callback(err);
-                    }
 
-                    if (res.ok) {
+                        if (!res || (res.status !== 401)) {
+                            return callback(err);
+                        }
+                        self.authenticate(self.credentials, function (err) {
+                            if (err) {
+                                return callback(err);
+                            }
+                            makeRequest(options, callback);
+                        });
+
+                    } else if (res.ok) {
                         callback(null, res.body, res);
                     } else {
                         err = new Error(res.text);
@@ -120,10 +134,10 @@ var shareFileModule = function (options) {
                 });
 
         });
-
     }
 
     this.authenticate = function () {
+        var self = this;
         var args = arguments;
         var options;
         var callback;
@@ -132,8 +146,8 @@ var shareFileModule = function (options) {
         var username;
         var password;
         var hostname;
+        var credentials;
         var url;
-        var self = this;
 
         if (args.length === 2) {
             options = args[0];
@@ -152,17 +166,37 @@ var shareFileModule = function (options) {
         username = (options && options.SHAREFILE_USERNAME) ? options.SHAREFILE_USERNAME : process.env.SHAREFILE_USERNAME;
         password = (options && options.SHAREFILE_PASSWORD) ? options.SHAREFILE_PASSWORD : process.env.SHAREFILE_PASSWORD;
 
-        if (!clientId || !clientSecret) {
-            throw new Error('CLIENT_ID or CLIENT_SECRET is undefined');
+        if (!clientId) {
+            throw new Error('CLIENT_ID is undefined');
+        }
+
+        if (!clientSecret) {
+            throw new Error('CLIENT_SECRET is undefined');
+        }
+
+        if (!hostname) {
+            throw new Error('SHAREFILE_HOSTNAME is undefined');
+        }
+
+        if (!username) {
+            throw new Error('SHAREFILE_USERNAME is undefined');
+        }
+
+        if (!password) {
+            throw new Error('SHAREFILE_PASSWORD is undefined');
         }
 
         url = 'https://' + hostname +'.sharefile.com/oauth/token';
 
-        url += '?grant_type=password';
-        url += '&client_id=' + clientId;
-        url += '&client_secret=' + clientSecret;
-        url += '&username=' + username;
-        url += '&password=' + password;
+        credentials = {
+            grant_type: 'password',
+            client_id: clientId,
+            client_secret: clientSecret,
+            username: username,
+            password: password
+        };
+
+        url = formatUrlQueryParams(url, credentials);
 
         console.log('>>> try to authenticate');
         console.log('>>> url = ', url);
@@ -177,6 +211,8 @@ var shareFileModule = function (options) {
 
                 if (res.ok) {
                     self.tokens = res.body;
+                    self.credentials = credentials;
+
                     callback(null, res.body, res);
                 } else {
                     err = new Error(res.text);
@@ -204,7 +240,7 @@ var shareFileModule = function (options) {
         var uri = '/sf/v3/Items';
 
         if (options.itemId) {
-            uri += '(' + options.itemId + ')'
+            uri += '(' + options.itemId + ')';
         }
 
         options.uri = uri;
@@ -212,7 +248,7 @@ var shareFileModule = function (options) {
         makeRequest(options, function (err, body, res) {
             if (err) {
                 if (callback && (typeof callback === 'function')) {
-                    callback(err );
+                    callback(err);
                 }
             } else {
                 if (callback && (typeof callback === 'function')) {
@@ -222,365 +258,55 @@ var shareFileModule = function (options) {
         });
     };
 
-    function multipartFormPostUpload_1(chunkUri, file, callback) {
-        var filePath;
-
-        if (!chunkUri) { //check is got upload url:
-            throw new Error('No Upload URL received');
-        }
-
-        if (!file || !file.path) { //check is got upload url:
-            throw new Error('Incorrect parameter "file"');
-        }
-
-        console.log('>>> try to upload the file');
-        filePath = file.path;
-        console.log(filePath);
-        console.log(chunkUri);
-
-        var size = {
-            'content-length': file.size
-        };
-        var type = {
-            'content-type': file.type
-        };
-
-        request
-            .post(chunkUri)
-            .attach('Filedata', filePath)
-            .set('content-type', 'multipart/form-data')
-            .set('connection', 'keep-alive')
-            .set('content-length', '9495')
-            .end(function (err, res) {
-                if (err) throw err;
-
-                console.log(res.status);
-                console.log(res.body);
-                console.log(res.text);
-
-                if (callback && (typeof callback === 'function')) {
-                    callback(err, res);
-                }
-            });
-    };
-
-    function multipartFormPostUpload_2(chunkUri, file, callback) {
-        var FormData = require('form-data');
-        var fs = require('fs');
-        var form = new FormData();
-        var filePath;
-        var err;
-
-        if (!chunkUri) { //check is got upload url:
-            throw new Error('No Upload URL received');
-        }
-
-        if (!file || !file.path) { //check is got upload url:
-            throw new Error('Incorrect parameter "file"');
-        }
-
-        console.log('>>> try to upload the file');
-        filePath = file.path;
-        console.log(filePath);
-        console.log(chunkUri);
-
-        form.append('Filedata', fs.createReadStream(filePath));
-        form.submit(chunkUri, function(err, res) {
-            if (err) throw err;
-            console.log('Done');
-            console.log(res.statusCode);
-            if (callback && (typeof callback === 'function')) {
-                callback(err, {success: 'uploaded'});
-            }
-        });
-    };
-
-    function multipartFormPostUpload_3(chunkUri, file, callback) {
-        var urlParser = require('url');
-        var url;
-        var FormData = require('form-data');
-        var form = new FormData();
-        var filePath;
-
-        if (!chunkUri) { //check is got upload url:
-            throw new Error('No Upload URL received');
-        }
-
-        if (!file || !file.path) { //check is got upload url:
-            throw new Error('Incorrect parameter "file"');
-        }
-
-        console.log('>>> try to upload the file');
-        filePath = file.path;
-        console.log(filePath);
-        console.log(chunkUri);
-
-        var http = require('http');
-
-        url = urlParser.parse(chunkUri);
-
-        var host = url.host;
-        var path = url.path;
-
-        form.append('Filedata', filePath);
-        /*form.append('Filedata', fs.createReadStream(filePath));
-        //form.submit(chunkUri, function(err, res) {
-        form.submit(chunkUri, function(err, res) {
-            if (err) {
-                return callback(err);
-            }
-            var message = '';
-
-            res.on('data', function (chunk) {
-                console.log('got data', chunk);
-                message += chunk;
-            });
-
-            res.on('end', function (chunk) {
-                console.log('res.end');
-                console.log(message);
-                callback(null, message);
-            });
-
-            console.log(res.req.headers);
-            console.log('Done');
-            console.log(res.statusCode);
-            //callback(null, {success: 'uploaded'});
-
-        });*/
-
-
-        var request = http.request({
-            method: 'post',
-            host: host,
-            path: path,
-            headers: form.getHeaders()
-        });
-
-        form.pipe(request);
-
-        request.on('response', function(res) {
-            console.log(res.statusCode);
-
-            var message = '';
-
-            res.on('data', function (chunk) {
-                console.log('got data', chunk);
-                message += chunk;
-            });
-
-            res.on('end', function () {
-                console.log('res.end');
-                console.log(message);
-                callback(null, message);
-            });
-
-            console.log(res.req.headers);
-            console.log('Done');
-            console.log(res.statusCode);
-        });
-
-
-        /*request.on('connect', function (socket) {
-                console.log('connected');
-
-                socket.on('data', function (chunk) {
-                    console.log('on.data');
-                });
-            })
-            .on('response', function(res) {
-            console.log('on.response');
-            console.log(res.statusCode);
-
-            if (callback && (typeof callback === 'function')) {
-                callback(null, res, res);
-            }
-        }).on('error', function(err) {
-            console.log('on.error');
-            console.log(err);
-
-            if (callback && (typeof callback === 'function')) {
-                callback(err);
-            }
-        });*/
-    };
-
-    function multipartFormPostUpload_4(chunkUri, file, callback) {
-        var urlParser = require('url');
-        var url;
-        var FormData = require('form-data');
-        var form = new FormData();
-        var filePath;
-
-        if (!chunkUri) { //check is got upload url:
-            throw new Error('No Upload URL received');
-        }
-
-        if (!file || !file.path) { //check is got upload url:
-            throw new Error('Incorrect parameter "file"');
-        }
-
-        console.log('>>> try to upload the file');
-        filePath = file.path;
-        console.log(filePath);
-        console.log(chunkUri);
-        var fileSize = file.size;
-
-        var http = require('http');
-
-        url = urlParser.parse(chunkUri);
-
-        var host = url.host;
-        var path = url.path;
-
-        var formHeaders = form.getHeaders();
-
-        //formHeaders['connection'] = 'keep-alive';
-        formHeaders['content-length'] = fileSize;
-
-        var CRLF = '\r\n';
-        //var form = new FormData();
-        //form.append('Filedata', fs.createReadStream(filePath));
-
-        var uploadOptions = {
-            header: CRLF + '--' + form.getBoundary() + CRLF + 'Content-Type: multipart/form-data' + CRLF + CRLF,
-            knownLength: file.size
-        };
-
-
-        fs.readFile(filePath, function (err, data) {
-            if (err) throw err;
-            console.log(data);
-
-            console.log(uploadOptions);
-            //console.log(fs.createReadStream(filePath));
-
-            form.append('Filedata', data, uploadOptions);
-
-            form.submit(chunkUri, function(err, res) {
-                var message = '';
-
-                if (err) throw err;
-                console.log(res.statusCode);
-
-                res.on('data', function (chunk) {
-                    console.log('got data', chunk);
-                    message += chunk;
-                });
-
-                res.on('end', function () {
-                    console.log('res.end');
-                    console.log(message);
-                    callback(null, message);
-                });
-
-            });
-        });
-
-
-
-        /*console.log('formHeaders');
-        console.log(formHeaders);
-
-        var request = http.request({
-            method: 'post',
-            host: host,
-            path: path,
-            headers: formHeaders
-        });
-
-        form.pipe(request);
-
-        request.on('response', function(res) {
-            console.log(res.statusCode);
-
-            var message = '';
-
-            res.on('data', function (chunk) {
-                console.log('got data', chunk);
-                message += chunk;
-            });
-
-            res.on('end', function () {
-                console.log('res.end');
-                console.log(message);
-                callback(null, message);
-            });
-
-            console.log(res.req.headers);
-            console.log('Done');
-            console.log(res.statusCode);
-        });*/
-
-    };
-
     function multipartFormPostUpload(chunkUri, file, callback) {
-        var fileName;
-        var filePath;
-
-        if (!chunkUri) { //check is got upload url:
-            throw new Error('No Upload URL received');
-        }
-
-        if (!file || !file.path) { //check is got upload url:
-            throw new Error('Incorrect parameter "file"');
-        }
-
         console.log('>>> try to upload the file');
 
-        fileName = file.originalFilename;
-        filePath = file.path;
+        var fileName = file.originalFilename;
+        var fileData = file.fileData;
+        var url = urlParser.parse(chunkUri);
+        var host = url.host;
+        var path = url.path;
+        var boundaryKey = new Date().valueOf();
+        var newline = '\r\n';
+        var body = '--' + boundaryKey + newline +
+            'Content-Disposition: form-data; name="File1"; filename="' + fileName + '"' + newline +
+            '' + newline +
+            fileData + newline +
+            '--' + boundaryKey +
+            '' + newline + newline;
 
-        console.log(filePath);
-        console.log(fileName);
-
-        function httpRequest(chunkUri, fileName, fileData, callback) {
-            var url = urlParser.parse(chunkUri);
-            var host = url.host;
-            var path = url.path;
-            var boundaryKey = new Date().valueOf();
-            var newline = '\r\n';
-
-            var body = '--' + boundaryKey + newline +
-                'Content-Disposition: form-data; name="File1"; filename="' + fileName + '"' + newline +
-                '' + newline +
-                fileData + newline +
-                '--' + boundaryKey +
-                '' + newline + newline;
-
-            //request:
-            var request = http.request({
-                method: 'post',
-                host: host,
-                path: path
-            });
-
-            request.setHeader('Content-Type', 'multipart/form-data; boundary="' + boundaryKey + '"');
-            request.write(body);
-            request.end();
-
-            //response:
-            request.on('response', function(res) {
-                var message = '';
-
-                console.log(res.statusCode);
-
-                res.on('data', function (chunk) {
-                    //console.log('got data', chunk);
-                    message += chunk;
-                });
-
-                res.on('end', function () {
-                    console.log(message);
-                    callback(null, message);
-                });
-            });
-        }
-
-        fs.readFile(filePath, function (err, fileData) {
-            if (err) throw err;
-            httpRequest(chunkUri, fileName, fileData, callback);
+        //request:
+        var request = http.request({
+            method: 'post',
+            host: host,
+            path: path
         });
+
+        request.setHeader('Content-Type', 'multipart/form-data; boundary="' + boundaryKey + '"');
+        request.write(body);
+        request.end();
+
+        //response:
+        request.on('response', function(res) {
+            var message = '';
+
+            console.log(res.statusCode);
+
+            res.on('data', function (chunk) {
+                message += chunk;
+            });
+
+            res.on('error', function (err) {
+                console.error(err);
+                callback(err);
+            });
+
+            res.on('end', function () {
+                console.log(message);
+                callback(null, message);
+            });
+        });
+
     };
 
     this.uploadFile = function (folderId, file, callback) {
@@ -591,9 +317,58 @@ var shareFileModule = function (options) {
 
         options.uri = uri;
 
-        //try to get ChunkUri:
-        makeRequest(options, function (err, body, res) {
+        if (!folderId) {
+            throw new Error('folderId is undefined');
+        }
+        if (!file) {
+            throw new Error('file is undefined');
+        }
+        if (!file.path) {
+            throw new Error('file.path is undefined');
+        }
+        if (!file.originalFilename) {
+            throw new Error('file.originalFilename is undefined');
+        }
+        if (!folderId) {
+            throw new Error('CLIENT_ID is undefined');
+        }
+        if (!folderId) {
+            throw new Error('CLIENT_ID is undefined');
+        }
+
+        async.parallel({
+
+            //try to get ChunkUri:
+            chunkUri: function (cb) {
+                makeRequest(options, function (err, body, res) {
+                    var uri;
+
+                    if (err) {
+                        return cb(rtt);
+                    }
+
+                    uri = body['ChunkUri'];
+                    cb(null, uri);
+                });
+            },
+
+            //try to get the file data:
+            fileData: function(cb) {
+                if (file.data) {
+                    return cb(null, file.data);
+                }
+
+                fs.readFile(file.path, function (err, data) {
+                    if (err) {
+                        return cb(err);
+                    }
+                    cb(null, data);
+                });
+            }
+
+        }, function (err, results) {
             var chunkUri;
+            var fileData;
 
             if (err) {
                 if (callback && (typeof callback === 'function')) {
@@ -602,15 +377,16 @@ var shareFileModule = function (options) {
                 return;
             }
 
-            chunkUri = body['ChunkUri'];
+            chunkUri = results.chunkUri;
+            fileData = results.fileData;
 
-            callback(null, chunkUri, res);
+            file.fileData = fileData;
 
-            /*multipartFormPostUpload(chunkUri, file, function (err, res) {
+            multipartFormPostUpload(chunkUri, file, function (err, res) {
                 if (callback && (typeof callback === 'function')) {
                     callback(err, res.body, res);
                 }
-            });*/
+            });
         });
     };
 
@@ -632,7 +408,6 @@ var shareFileModule = function (options) {
         }
 
         hostname = self.tokens.subdomain;
-        //https://nokojetihinboxdesign.sharefile.com/Viewer/Thumbnail/?itemId=fi2e93c3-9b20-1f89-0886-8dfd51257995&thumbNailSize=75
         url = 'https://' + hostname + '.sharefile.com/Viewer/Thumbnail/?itemId=' + itemId;
         url += '&thumbNailSize=' + size;
 

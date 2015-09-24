@@ -5,6 +5,7 @@ var multipart = require('connect-multiparty');
 var multipartMiddleware = multipart();
 
 var shareFile = require('../helpers/shareFile');
+var fs = require('fs');
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
