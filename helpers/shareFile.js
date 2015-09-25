@@ -15,32 +15,7 @@ var shareFileModule = function (options) {
     var self = this;
 
     this.credentials = null;
-
-    //this.tokens = null;
-
-    /*
-
-
-     https://storage-eu-1.sharefile.com/upload.aspx?uploadid=b58ecc82-dcce-479b-a0dc-90a461c6664a&tool=apiv3&batchid=495548d7-4f77-4ff6-b013-d027b5d05e08&encparams=PBN6_1wjDN-1sW9OZszG82T4lb9C6j7eqW2wkB9iMpFAfcVgCdqfIGQZiBCKbV-YyzPHs9L1H9L03swD0UAM_gNIDAIaztYXO72iDIJPT0mfUNTYeCVpjOeUuZJ5VSe8VxUPjVA1jYgOPk8aomYz5VKR_3j3lR7rwD7Y55Gp_RdSXuaBYhnRPr5hjRdmBWWZ3tDd599bzWsbtG8Td6I_QldscT_QS_wIdsSjcbtcGTJ1OHMIVv7H3AvZI8iwwqXylzKwewVUZqnLF4T6E9YVk03vHNdyOHkeQaICmEM1kE-x8K_24BTDzSDpE3QLa2_ROOnYGK9-NME_sA7MvPAev8PWkdmCm-PX_4rJMuldzwCiwnKDwEOkavz4gMD0q-IuMS8khjRtVzfTNIvSOOOnltsNNvBX016piq7asuiVtj2Y119e1ZXQJKeauYxdgCE6-CDx8aySU6zy1RxeLC7sAVqsdwS0whJWe5LageZeXhon8Fm51puEzQp6k5Sj1LLbKfKVrOPVgVQyvAyEYNXmkmUzrGTPSnpNa5WOXtBTDxk2Xv_WBbmD0avLr5L5ZsTQWWLy9j2Zeug554nTx--UjIBICOp9B1nmz1u57lg$&h=4gsjXq7%2bzJExZ81aKTjPdz8W%2bYeir4NtW6IRRwnrXGU%3d
-
-
-    */
-
-    this.tokens = {
-        access_token: "gvQGsr5soRF7R6tzZBaefxKBG9qzgGX5$$zI0MhYaBbYD6iFoH0mKLSqYYNvtQU0xU",
-        refresh_token: "gvQGsr5soRF7R6tzZBaefxKBG9qzgGX5$$yYBDsNJkBgBmtjDZhPPbp5x4PvlxwzBtDA8JJhwW",
-        token_type: "bearer",
-        appcp: "sharefile.com",
-        apicp: "sharefile.com",
-        subdomain: "nokojetihinboxdesign",
-        expires_in: 28800,
-        access_files_folders: true,
-        modify_files_folders: true,
-        admin_users: true,
-        admin_accounts: true,
-        change_my_settings: true,
-        web_app_login: true
-     };
+    this.tokens = null;
 
     function isAuthorized(callback) {
         var tokens = self.tokens;
@@ -344,7 +319,7 @@ var shareFileModule = function (options) {
                     var uri;
 
                     if (err) {
-                        return cb(rtt);
+                        return cb(err);
                     }
 
                     uri = body['ChunkUri'];
