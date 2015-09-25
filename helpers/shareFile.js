@@ -304,12 +304,6 @@ var shareFileModule = function (options) {
         if (!file.originalFilename) {
             throw new Error('file.originalFilename is undefined');
         }
-        if (!folderId) {
-            throw new Error('CLIENT_ID is undefined');
-        }
-        if (!folderId) {
-            throw new Error('CLIENT_ID is undefined');
-        }
 
         async.parallel({
 
